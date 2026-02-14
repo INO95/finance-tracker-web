@@ -1,0 +1,55 @@
+{
+  "config": {
+    "schemaVersion": 2,
+    "currency": "JPY",
+    "owner": "sample-user",
+    "last_updated": "2026-02-08T00:00:00.000Z"
+  },
+  "transactions": [
+    {
+      "id": 1760000000001,
+      "date": "2026-02-01",
+      "item": "월급",
+      "amount": 295000,
+      "category": "급여",
+      "paymentMethod": "스미토모",
+      "memo": "sample income",
+      "currency": "JPY",
+      "tags": [],
+      "created_at": "2026-02-01T09:00:00.000Z",
+      "updated_at": "2026-02-01T09:00:00.000Z"
+    },
+    {
+      "id": 1760000000002,
+      "date": "2026-02-02",
+      "item": "점심 카레",
+      "amount": -1000,
+      "category": "식비",
+      "paymentMethod": "현금",
+      "memo": "sample expense",
+      "currency": "JPY",
+      "tags": [
+        "외식"
+      ],
+      "created_at": "2026-02-02T12:30:00.000Z",
+      "updated_at": "2026-02-02T12:30:00.000Z"
+    },
+    {
+      "id": 1760000000003,
+      "date": "2026-02-03",
+      "item": "교통비 충전",
+      "amount": -3000,
+      "category": "교통비",
+      "paymentMethod": "올리브 카드 (데빗)",
+      "memo": "sample transport",
+      "currency": "JPY",
+      "tags": [],
+      "created_at": "2026-02-03T08:20:00.000Z",
+      "updated_at": "2026-02-03T08:20:00.000Z"
+    }
+  ],
+  "liabilities": {
+    "creditCards": {}
+  },
+  "categories": []
+}

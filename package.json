@@ -1,0 +1,30 @@
+{
+    "name": "finance-tracker-web",
+    "version": "1.0.0",
+    "description": "Personal finance tracking web application with multi-currency support",
+    "main": "src/server.js",
+    "scripts": {
+        "start": "node src/server.js",
+        "dev": "node src/server.js",
+        "migrate:sqlite": "node scripts/migrate-json-to-sqlite.js",
+        "bench:transactions": "node scripts/benchmark-transactions.js",
+        "bench:transactions:ci": "node scripts/benchmark-transactions.js --rows 10000 --warmup 12 --measured 60 --limit 100 --p95-threshold-ms 500 --output-json .artifacts/benchmark-head.json",
+        "bench:compare": "node scripts/compare-benchmark.js",
+        "ci:local": "npm test && npm run bench:transactions:ci",
+        "test": "node --test"
+    },
+    "keywords": [
+        "finance",
+        "budget",
+        "expense-tracker",
+        "personal-finance"
+    ],
+    "author": "",
+    "license": "MIT",
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "dependencies": {
+        "sqlite3": "^5.1.7"
+    }
+}

@@ -1,0 +1,244 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run transactions benchmark smoke
+        if: matrix.node-version == 22
+        run: npm run bench:transactions:ci
+
+      - name: Run base benchmark (pull request only)
+        if: matrix.node-version == 22 && github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          BASE_DIR="$(mktemp -d)"
+
+          git fetch --no-tags origin "${BASE_SHA}"
+          git worktree add --detach "${BASE_DIR}" "${BASE_SHA}"
+
+          pushd "${BASE_DIR}"
+          if [ -f package-lock.json ]; then
+            npm ci || npm install --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+          if [ -f scripts/benchmark-transactions.js ]; then
+            npm run bench:transactions -- --rows 10000 --warmup 12 --measured 60 --limit 100 --p95-threshold-ms 500 --output-json .artifacts/benchmark-base.json
+          else
+            echo "base branch does not include scripts/benchmark-transactions.js; skip base benchmark"
+          fi
+          popd
+
+          mkdir -p .artifacts
+          if [ -f "${BASE_DIR}/.artifacts/benchmark-base.json" ]; then
+            cp "${BASE_DIR}/.artifacts/benchmark-base.json" .artifacts/benchmark-base.json
+          fi
+          git worktree remove --force "${BASE_DIR}"
+
+      - name: Compare benchmark regression (pull request)
+        if: always() && matrix.node-version == 22 && github.event_name == 'pull_request'
+        run: |
+          if [ -f .artifacts/benchmark-head.json ] && [ -f .artifacts/benchmark-base.json ]; then
+            npm run bench:compare -- --head .artifacts/benchmark-head.json --base .artifacts/benchmark-base.json --max-regression-pct 25 --max-regression-abs-ms 5 --output-json .artifacts/benchmark-compare.json --step-summary "$GITHUB_STEP_SUMMARY"
+          elif [ -f .artifacts/benchmark-head.json ]; then
+            npm run bench:compare -- --head .artifacts/benchmark-head.json --max-regression-pct 25 --max-regression-abs-ms 5 --output-json .artifacts/benchmark-compare.json --step-summary "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish benchmark summary (non-pull-request)
+        if: always() && matrix.node-version == 22 && github.event_name != 'pull_request'
+        run: |
+          if [ -f .artifacts/benchmark-head.json ]; then
+            npm run bench:compare -- --head .artifacts/benchmark-head.json --max-regression-pct 25 --max-regression-abs-ms 5 --output-json .artifacts/benchmark-compare.json --step-summary "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Comment benchmark regression on PR
+        if: always() && matrix.node-version == 22 && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- benchmark-regression-comment -->';
+
+            const comparePath = '.artifacts/benchmark-compare.json';
+            const headPath = '.artifacts/benchmark-head.json';
+
+            const readJson = p => {
+              if (!fs.existsSync(p)) return null;
+              return JSON.parse(fs.readFileSync(p, 'utf8'));
+            };
+
+            const compare = readJson(comparePath);
+            const head = compare?.head || readJson(headPath);
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+
+            const previousP95Match = existing?.body?.match(/^- p95\\(head\\):\\s*([0-9.]+)ms$/m);
+            const previousP95 = previousP95Match ? Number(previousP95Match[1]) : null;
+            const hasPreviousP95 = Number.isFinite(previousP95);
+            const TREND_STABLE_ABS_MS = 0.2;
+
+            const trendInfo = (currentP95) => {
+              if (!hasPreviousP95) return null;
+              const delta = Number(currentP95) - Number(previousP95);
+              const ratio = previousP95 > 0 ? (delta / previousP95) * 100 : 0;
+              const deltaSign = delta > 0 ? '+' : '';
+              const ratioSign = ratio > 0 ? '+' : '';
+              const trendLabel = Math.abs(delta) <= TREND_STABLE_ABS_MS
+                ? 'STABLE'
+                : (delta < 0 ? 'IMPROVED' : 'REGRESSED');
+              return {
+                label: trendLabel,
+                delta,
+                ratio,
+                lines: [
+                  `- trend vs previous comment: ${deltaSign}${delta.toFixed(3)}ms (${ratioSign}${ratio.toFixed(2)}%)`,
+                  `- trend label: ${trendLabel} (stable band: ±${TREND_STABLE_ABS_MS.toFixed(3)}ms)`,
+                  `- previous -> current p95: ${previousP95.toFixed(3)}ms -> ${Number(currentP95).toFixed(3)}ms`,
+                ],
+              };
+            };
+
+            const beginnerSummary = ({ hasBase, pass, deltaMs, trend }) => {
+              if (hasBase) {
+                if (!pass) return '주의: 기준 브랜치 대비 성능 저하가 게이트를 초과했습니다.';
+                if (Number(deltaMs) < -0.2) return '개선: 기준 브랜치보다 빨라졌습니다.';
+                if (Number(deltaMs) > 0.2) return '안정: 약간 느려졌지만 허용 범위 안입니다.';
+                return '안정: 기준 브랜치와 거의 동일한 성능입니다.';
+              }
+              if (!trend) return '정보: base 비교가 없어 단독 측정 결과만 표시합니다.';
+              if (trend.label === 'IMPROVED') return '개선: 이전 실행보다 빨라졌습니다.';
+              if (trend.label === 'REGRESSED') return '주의: 이전 실행보다 느려졌지만 base 비교는 생략되었습니다.';
+              return '안정: 이전 실행과 거의 동일합니다.';
+            };
+
+            let body = '';
+            if (compare && head) {
+              const hasBase = Boolean(compare.base);
+              const p95Head = Number(head.stats?.p95Ms ?? 0);
+              const p95Base = Number(compare.base?.stats?.p95Ms ?? 0);
+              const regressionPct = compare.regression?.regressionPct;
+              const deltaMs = compare.regression?.deltaMs;
+              const gate = Number(compare.maxRegressionPct ?? 25);
+              const absGateMs = Number(compare.maxRegressionAbsMs ?? 5);
+              const trend = trendInfo(p95Head);
+              const quick = beginnerSummary({
+                hasBase,
+                pass: compare.pass,
+                deltaMs: Number.isFinite(Number(deltaMs)) ? Number(deltaMs) : 0,
+                trend,
+              });
+              body = [
+                marker,
+                '## Transactions Benchmark',
+                '',
+                `- beginner summary: ${quick}`,
+                `- endpoint: \`${head.endpoint}\``,
+                `- p95(head): ${p95Head.toFixed(3)}ms`,
+                ...(trend ? trend.lines : []),
+                hasBase ? `- p95(base): ${p95Base.toFixed(3)}ms` : '- p95(base): unavailable',
+                hasBase && Number.isFinite(regressionPct) ? `- delta: ${Number(deltaMs).toFixed(3)}ms (${Number(regressionPct).toFixed(2)}%)` : '- delta: n/a',
+                hasBase ? `- gates: <= ${gate.toFixed(2)}% and <= ${absGateMs.toFixed(3)}ms` : '- gate: skipped (no base benchmark)',
+                `- result: ${compare.pass ? 'PASS' : 'FAIL'}`,
+                '',
+                '| metric | head (ms) |',
+                '|---|---:|',
+                `| avg | ${Number(head.stats?.avgMs ?? 0).toFixed(3)} |`,
+                `| p50 | ${Number(head.stats?.p50Ms ?? 0).toFixed(3)} |`,
+                `| p90 | ${Number(head.stats?.p90Ms ?? 0).toFixed(3)} |`,
+                `| p95 | ${p95Head.toFixed(3)} |`,
+                `| p99 | ${Number(head.stats?.p99Ms ?? 0).toFixed(3)} |`,
+              ].join('\n');
+            } else if (head) {
+              const p95Head = Number(head.stats?.p95Ms ?? 0);
+              const trend = trendInfo(p95Head);
+              const quick = beginnerSummary({ hasBase: false, pass: true, deltaMs: 0, trend });
+              body = [
+                marker,
+                '## Transactions Benchmark',
+                '',
+                `- beginner summary: ${quick}`,
+                `- endpoint: \`${head.endpoint}\``,
+                `- p95(head): ${p95Head.toFixed(3)}ms`,
+                ...(trend ? trend.lines : []),
+                '- regression: unavailable (compare artifact missing)',
+              ].join('\n');
+            } else {
+              body = [
+                marker,
+                '## Transactions Benchmark',
+                '',
+                '- beginner summary: 벤치마크 결과를 찾지 못했습니다.',
+                '- benchmark result unavailable',
+              ].join('\n');
+            }
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Upload benchmark artifact
+        if: always() && matrix.node-version == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-transactions-node22
+          path: |
+            .artifacts/benchmark-head.json
+            .artifacts/benchmark-base.json
+            .artifacts/benchmark-compare.json
+          if-no-files-found: warn

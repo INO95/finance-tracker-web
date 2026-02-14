@@ -1,0 +1,17 @@
+services:
+  finance-web:
+    build: .
+    container_name: finance-tracker-web
+    ports:
+      - "4380:4380"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - FINANCE_WEB_HOST=0.0.0.0
+      - FINANCE_WEB_PORT=4380
+      - FINANCE_WEB_API_TOKEN=${FINANCE_WEB_API_TOKEN:-}
+      - FINANCE_CORS_ORIGIN=${FINANCE_CORS_ORIGIN:-*}
+      - FINANCE_STORAGE_DRIVER=${FINANCE_STORAGE_DRIVER:-sqlite}
+      - FINANCE_SQLITE_PATH=${FINANCE_SQLITE_PATH:-/app/data/finance_db.sqlite}
+    restart: unless-stopped
