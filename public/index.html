@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moltbot Finance MVP</title>
+  <link rel="stylesheet" href="./assets/css/main.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <h1>가계부 웹앱 MVP</h1>
+      <p>일일 입력과 월별 점검을 빠르게 하기 위한 개인 운영 대시보드</p>
+    </div>
+
+    <div class="panel">
+      <h2>조회</h2>
+      <div class="filters">
+        <select id="scopeMode">
+          <option value="all">전체</option>
+          <option value="single">월별</option>
+          <option value="range">기간</option>
+        </select>
+        <select id="month"></select>
+        <select id="fromMonth"></select>
+        <select id="toMonth"></select>
+        <select id="categoryFilter"></select>
+        <button id="run">조회</button>
+      </div>
+      <div class="inline" style="margin-top:8px; justify-content:flex-end; gap:6px;">
+        <button id="presetAllBtn" class="ghost" type="button">전체</button>
+        <button id="presetThisMonthBtn" class="ghost" type="button">이번달</button>
+        <button id="presetRecent3Btn" class="ghost" type="button">최근 3개월</button>
+      </div>
+      <div class="hint">기간 조회는 시작월~종료월을 포함해서 집계합니다.</div>
+    </div>
+
+    <div class="panel">
+      <h2>요약</h2>
+      <div id="summaryRangeLabel" class="muted" style="margin-bottom:6px;"></div>
+      <div id="alertBox" class="muted"></div>
+      <div class="inline" style="margin:8px 0 6px;">
+        <span class="muted">식비 예산 (JPY)</span>
+        <input id="foodBudgetInput" type="text" inputmode="numeric" style="width:180px;" />
+        <button id="saveBudgetBtn" class="ghost" type="button">예산 저장</button>
+      </div>
+      <div id="budgetScopeInfo" class="hint"></div>
+      <div class="subhead">전체</div>
+      <div id="kpiGeneral" class="grid"></div>
+      <div class="subhead">식비</div>
+      <div id="kpiFood" class="grid"></div>
+    </div>
+
+    <div class="panel">
+      <h2>거래 입력</h2>
+      <div class="filters">
+        <div>
+          <label class="muted">날짜</label>
+          <input id="newDate" type="date" />
+        </div>
+        <div style="grid-column: span 2;">
+          <label class="muted">내용</label>
+          <input id="newItem" placeholder="예: 구독 결제, 장보기, 회식 정산" />
+        </div>
+        <div>
+          <label class="muted">카테고리</label>
+          <select id="newCategory"></select>
+        </div>
+        <div>
+          <label class="muted">거래구분</label>
+          <select id="txType">
+            <option value="expense">지출</option>
+            <option value="income">수입</option>
+          </select>
+        </div>
+        <div>
+          <label class="muted">금액</label>
+          <input id="newAmount" type="text" inputmode="numeric" placeholder="숫자만 입력" />
+        </div>
+        <div>
+          <label class="muted">통화</label>
+          <select id="currency">
+            <option value="JPY">JPY (¥)</option>
+            <option value="KRW">KRW (₩)</option>
+            <option value="USD">USD ($)</option>
+          </select>
+        </div>
+        <div>
+          <label class="muted">결제수단</label>
+          <select id="newMethod"></select>
+        </div>
+        <div style="grid-column: span 2;">
+          <label class="muted">메모</label>
+          <input id="newMemo" placeholder="메모 (선택)" />
+        </div>
+        <div style="grid-column: 1 / -1; display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+          <button id="manageCategoryBtn" class="ghost" type="button">카테고리 관리</button>
+          <button id="manageMethodBtn" class="ghost" type="button">결제수단 관리</button>
+          <button id="saveDefaultsBtn" class="ghost" type="button">기본값 저장</button>
+          <button id="addTxBtn">거래 저장</button>
+        </div>
+      </div>
+      <div id="txFormStatus" class="status-line muted"></div>
+    </div>
+
+    <div class="panel">
+      <h2>월별 추이</h2>
+      <div class="inline" style="justify-content:space-between; margin-bottom:8px;">
+        <div id="monthlyStats" class="hint"></div>
+        <div class="inline" style="gap:6px;">
+          <span class="muted">정렬</span>
+          <select id="monthlySort" style="width:120px;">
+            <option value="desc">최신순</option>
+            <option value="asc">오래된순</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="monthlyTable">
+          <thead>
+            <tr>
+              <th rowspan="2">월</th>
+              <th rowspan="2">수입(JPY)</th>
+              <th rowspan="2">지출(JPY)</th>
+              <th colspan="3">식비</th>
+              <th rowspan="2">코멘트</th>
+            </tr>
+            <tr>
+              <th>실질 식비(JPY)</th>
+              <th>예산 대비</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="inline" style="justify-content:space-between;">
+        <h2 style="margin:0;">거래내역</h2>
+        <div class="inline">
+          <select id="txLimit" style="width:120px;">
+            <option value="10">10건</option>
+            <option value="50">50건</option>
+            <option value="100" selected>100건</option>
+          </select>
+          <select id="txSort" style="width:180px;">
+            <option value="date_desc">최신순</option>
+            <option value="date_asc">오래된순</option>
+            <option value="expense_desc">지출 큰순</option>
+            <option value="expense_asc">지출 작은순</option>
+          </select>
+          <button id="manageBalancesBtn" class="ghost" type="button">잔고 관리</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="txTable">
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>날짜</th>
+              <th>내용</th>
+              <th>카테고리</th>
+              <th>결제수단</th>
+              <th>수입</th>
+              <th>지출</th>
+              <th id="bal1Header">스미토모 통장</th>
+              <th id="bal2Header">라쿠텐 통장</th>
+              <th id="bal3Header">현금</th>
+              <th>메모</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button id="prevPageBtn" class="ghost" type="button">이전</button>
+        <div id="pageLinks" class="page-links"></div>
+        <button id="nextPageBtn" class="ghost" type="button">다음</button>
+        <span id="pageInfo" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>보안 설정(선택)</h2>
+      <div class="filters">
+        <input id="apiToken" placeholder="API 토큰 (서버가 토큰 모드일 때만 필요)" />
+        <button id="saveTokenBtn">토큰 저장</button>
+        <div id="tokenState" class="mono muted"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop">
+    <div class="modal">
+      <div class="inline" style="justify-content:space-between; margin-bottom:10px;">
+        <h3 id="modalTitle">관리</h3>
+        <button id="modalCloseBtn" class="ghost" type="button">닫기</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="./assets/js/state.js"></script>
+  <script src="./assets/js/format.js"></script>
+  <script src="./assets/js/api.js"></script>
+  <script src="./assets/js/render.js"></script>
+  <script src="./assets/js/modals.js"></script>
+  <script src="./assets/js/app.js"></script>
+</body>
+</html>

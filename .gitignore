@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# Data files (keep structure, exclude content)
+data/*.json
+!data/.gitkeep
+!data/example.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+.artifacts/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
