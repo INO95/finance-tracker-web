@@ -12,18 +12,40 @@ A lightweight, self-hosted personal finance tracker designed for:
 - Monthly food budget tracking with "effective food cost" analysis
 - Multi-currency support (JPY, KRW, USD)
 - Customizable categories and payment methods
+- Recurring transaction automation and account reconciliation
 
 **Tech Stack:** Minimal Node.js backend with vanilla HTML/CSS/JS frontend, SQLite storage via `better-sqlite3`
 
 ## Features
 
-- **Transaction CRUD** — Add, edit, and search transactions via API
+- **Transaction CRUD** — Add, edit, delete, restore, and search transactions via API/UI
+- **Recurring Templates** — Save monthly recurring transactions and apply due items in one click
+- **CSV Import** — Preview and bulk-import bank/card exports
 - **Budget Alerts** — Track food expenses with reimbursement adjustments
+- **Category Budgets** — Set monthly caps per category and track overages
+- **Balance Reconciliation** — Track expected vs actual balance from account snapshots
 - **Monthly Summary** — Visual breakdown by category
 - **Multi-Currency** — JPY (¥), KRW (₩), USD ($)
 - **Customization** — Add custom categories and payment methods
 - **Responsive UI** — Mobile-friendly dashboard
 - **Token Auth** — Optional API authentication
+
+## Daily Workflow
+
+1. Record a new transaction from the main form or load a quick template.
+2. Apply monthly recurring items from the "Recurring Templates" panel when they become due.
+3. Fix mistakes inline with edit/delete, then undo accidental deletes from the undo bar.
+4. Import external CSV exports when manual entry is too slow.
+5. Review category budgets, food-budget alerts, and balance reconciliation in the dashboard.
+
+## Local-Only UI Data
+
+The following items are stored in browser `localStorage`, not on the server:
+- Recurring transaction templates
+- Balance reconciliation snapshots (baseline date/balance and actual balance)
+- UI defaults, custom category/method lists, and saved API token
+
+Transactions, summaries, and persisted budget settings still live in the server-side storage backend.
 
 ## Quick Start
 
@@ -56,6 +78,11 @@ Open http://localhost:4380 in your browser.
 ```bash
 curl http://127.0.0.1:4380/api/health
 ```
+
+Then open the browser dashboard and verify:
+- recurring template cards appear in the right-side panel
+- category budget and balance reconciliation tables render
+- edit/delete buttons appear in the transaction table
 
 ### Test
 
@@ -171,8 +198,12 @@ See [docs/API.md](docs/API.md) for full documentation.
 | GET | `/api/finance/transactions` | List transactions |
 | POST | `/api/finance/transactions` | Create transaction |
 | PATCH | `/api/finance/transactions/:id` | Update transaction |
+| DELETE | `/api/finance/transactions/:id` | Delete transaction |
+| POST | `/api/finance/transactions/restore` | Restore a deleted transaction |
 | GET | `/api/finance/summary` | Monthly summary |
 | GET | `/api/finance/meta` | Categories & methods |
+| GET | `/api/finance/settings` | Load food/category budget settings |
+| POST | `/api/finance/settings` | Update food/category budget settings |
 | GET | `/api/health` | Health check |
 
 ## Screenshots

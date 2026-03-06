@@ -4,7 +4,7 @@ Base URL: `http://localhost:4380/api/finance`
 
 ## Authentication
 
-For write operations (POST, PATCH), include `X-Api-Token` header if `FINANCE_WEB_API_TOKEN` is configured.
+For write operations (`POST`, `PATCH`, `DELETE`), include `X-Api-Token` header if `FINANCE_WEB_API_TOKEN` is configured.
 
 ```
 X-Api-Token: your-token-here
@@ -28,6 +28,7 @@ List transactions with filtering and pagination.
 | `category` | string | Filter by category |
 | `q` | string | Search in item, memo, paymentMethod, category |
 | `memo` | string | Filter by memo content |
+| `paginate` | boolean-ish | Set `false` to return all matching rows without slicing |
 | `limit` | number | Results per page (1-100, default: 100) |
 | `page` | number | Page number (default: 1) |
 | `sort` | string | `date_desc`, `date_asc`, `expense_desc`, `expense_asc` |
@@ -109,6 +110,57 @@ Update an existing transaction. Send only fields to update.
 
 ---
 
+### DELETE /transactions/:id
+
+Delete a transaction and return the deleted row payload so the UI can offer undo/restore.
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "transaction": {
+    "id": 1738912345678,
+    "date": "2026-02-08",
+    "item": "점심",
+    "amount": -1200,
+    "category": "식비",
+    "paymentMethod": "현금",
+    "memo": "라멘",
+    "currency": "JPY",
+    "tags": [],
+    "created_at": "2026-02-08T01:00:00.000Z",
+    "updated_at": null
+  }
+}
+```
+
+---
+
+### POST /transactions/restore
+
+Restore a previously deleted transaction. The request body should be the deleted row payload returned by `DELETE /transactions/:id`.
+
+**Request Body:**
+
+```json
+{
+  "id": 1738912345678,
+  "date": "2026-02-08",
+  "item": "점심",
+  "amount": -1200,
+  "category": "식비",
+  "paymentMethod": "현금",
+  "memo": "라멘",
+  "currency": "JPY",
+  "tags": [],
+  "created_at": "2026-02-08T01:00:00.000Z",
+  "updated_at": null
+}
+```
+
+---
+
 ### POST /transactions/:id/tags
 
 Add or remove tags.
@@ -185,21 +237,56 @@ Food budget alert with status level.
 
 Available categories and payment methods.
 
+**Response fields:**
+- `currencies`
+- `categories`
+- `paymentMethods`
+- `foodBudgetYen`
+- `categoryBudgets`
+
 ---
 
 ### GET /settings
 
-Current settings (food budget).
-
-### POST /settings
-
-Update settings.
+Current persisted budget settings.
 
 ```json
 {
-  "foodBudgetYen": 70000
+  "foodBudgetYen": 70000,
+  "categoryBudgets": {
+    "식비": 20000,
+    "교통비": 10000
+  }
 }
 ```
+
+### POST /settings
+
+Update budget settings. Partial payloads are allowed.
+
+```json
+{
+  "foodBudgetYen": 70000,
+  "categoryBudgets": {
+    "식비": 20000,
+    "교통비": 10000
+  }
+}
+```
+
+Notes:
+- `foodBudgetYen` must be a positive number.
+- `categoryBudgets` must be an object of non-negative numbers.
+- A category budget set to `0` is removed from the persisted config.
+
+---
+
+## Browser-Local Features
+
+The following UI features do not have dedicated server endpoints because they are intentionally stored in browser `localStorage`:
+- recurring transaction templates
+- balance reconciliation snapshots
+- local form defaults and custom UI-only lists
 
 ---
 
