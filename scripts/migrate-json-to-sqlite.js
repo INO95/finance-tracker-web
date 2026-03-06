@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const sqlite3 = require('sqlite3');
+const Database = require('better-sqlite3');
 
 function parseArgs(argv) {
     const out = {};
@@ -18,51 +18,23 @@ function parseArgs(argv) {
 }
 
 function openDb(filePath) {
-    return new Promise((resolve, reject) => {
-        const db = new sqlite3.Database(filePath, err => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            resolve(db);
-        });
-    });
+    return new Database(filePath);
 }
 
 function run(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function onRun(err) {
-            if (err) {
-                reject(err);
-                return;
-            }
-            resolve({ lastID: this.lastID, changes: this.changes });
-        });
-    });
+    const result = db.prepare(sql).run(...params);
+    return {
+        lastID: Number(result.lastInsertRowid || 0),
+        changes: Number(result.changes || 0),
+    };
 }
 
 function exec(db, sql) {
-    return new Promise((resolve, reject) => {
-        db.exec(sql, err => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            resolve();
-        });
-    });
+    db.exec(sql);
 }
 
 function close(db) {
-    return new Promise((resolve, reject) => {
-        db.close(err => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            resolve();
-        });
-    });
+    db.close();
 }
 
 function sanitizeTags(tags) {
@@ -102,14 +74,14 @@ async function main() {
     await fs.promises.mkdir(path.dirname(sqlitePath), { recursive: true });
     const schemaSql = await fs.promises.readFile(schemaPath, 'utf8');
 
-    const db = await openDb(sqlitePath);
+    const db = openDb(sqlitePath);
 
     try {
-        await exec(db, 'PRAGMA journal_mode=WAL;');
-        await exec(db, 'PRAGMA synchronous=NORMAL;');
-        await exec(db, schemaSql);
+        exec(db, 'PRAGMA journal_mode=WAL;');
+        exec(db, 'PRAGMA synchronous=NORMAL;');
+        exec(db, schemaSql);
 
-        await run(db, 'BEGIN IMMEDIATE');
+        exec(db, 'BEGIN IMMEDIATE');
 
         let inserted = 0;
         for (let i = 0; i < txs.length; i += 1) {
@@ -126,7 +98,7 @@ async function main() {
             const createdAt = tx.created_at ? String(tx.created_at) : new Date().toISOString();
             const updatedAt = tx.updated_at ? String(tx.updated_at) : null;
 
-            const result = await run(
+            const result = run(
                 db,
                 `INSERT OR IGNORE INTO transactions
                 (id, date, item, amount, category, payment_method, memo, currency, tags_json, created_at, updated_at)
@@ -136,17 +108,17 @@ async function main() {
             inserted += Number(result.changes || 0);
         }
 
-        await run(db, 'COMMIT');
+        exec(db, 'COMMIT');
         console.log(`Migration complete: source=${txs.length}, inserted=${inserted}, sqlite=${sqlitePath}`);
     } catch (error) {
         try {
-            await run(db, 'ROLLBACK');
+            exec(db, 'ROLLBACK');
         } catch {
             // ignore rollback failures
         }
         throw error;
     } finally {
-        await close(db);
+        close(db);
     }
 }
 

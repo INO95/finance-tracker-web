@@ -48,6 +48,10 @@ test('month format validation and tag payload validation return 422', async () =
         assert.equal(invalidMonthRes.status, 422);
         assert.equal(invalidMonthRes.json.errorCode, 'validation_failed');
 
+        const invalidMonthValueRes = await ctx.request({ method: 'GET', pathname: '/api/finance/summary?month=2026-99' });
+        assert.equal(invalidMonthValueRes.status, 422);
+        assert.equal(invalidMonthValueRes.json.errorCode, 'validation_failed');
+
         const createRes = await ctx.request({
             method: 'POST',
             pathname: '/api/finance/transactions',

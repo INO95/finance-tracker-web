@@ -55,8 +55,22 @@ function createSummaryRoutes({
         return true;
       }
 
+      const budgetYen = await getFoodBudgetYen();
+      if (typeof storage.getMonthlySummary === 'function' && typeof storage.countTransactions === 'function') {
+        const [rowCount, monthly] = await Promise.all([
+          storage.countTransactions(scope),
+          storage.getMonthlySummary(scope, budgetYen),
+        ]);
+        sendJson(res, 200, {
+          rowCount,
+          monthly,
+          latestMonth: monthly.length ? monthly[monthly.length - 1] : null,
+        });
+        return true;
+      }
+
       const scopedRows = await loadScopedRows(storage, scope);
-      const monthly = computeMonthlySummary(scopedRows, await getFoodBudgetYen());
+      const monthly = computeMonthlySummary(scopedRows, budgetYen);
 
       sendJson(res, 200, {
         rowCount: scopedRows.length,
@@ -76,6 +90,15 @@ function createSummaryRoutes({
       const errors = validateMonthScope(scope);
       if (errors.length) {
         sendValidationFailed(res, errors);
+        return true;
+      }
+
+      if (typeof storage.getEffectiveFoodStats === 'function') {
+        const budgetYen = await getFoodBudgetYen();
+        sendJson(res, 200, {
+          month: scope.month || 'all',
+          ...await storage.getEffectiveFoodStats(scope, budgetYen),
+        });
         return true;
       }
 
@@ -99,6 +122,33 @@ function createSummaryRoutes({
       const errors = validateMonthScope(scope);
       if (errors.length) {
         sendValidationFailed(res, errors);
+        return true;
+      }
+
+      if (typeof storage.getEffectiveFoodStats === 'function' && typeof storage.getMonthCount === 'function') {
+        const baseBudgetYen = await getFoodBudgetYen();
+        const monthCount = await storage.getMonthCount(scope);
+        const budgetYen = baseBudgetYen * monthCount;
+        const food = await storage.getEffectiveFoodStats(scope, budgetYen);
+        const ratio = food.budget > 0 ? Math.round((food.effective / food.budget) * 100) : 0;
+        const level = food.effective > food.budget
+          ? 'danger'
+          : (food.effective > food.budget * 0.9 ? 'warn' : 'ok');
+        const message = level === 'danger'
+          ? '실질 식비가 월 예산을 초과했습니다.'
+          : level === 'warn'
+            ? '실질 식비가 예산의 90%를 넘었습니다.'
+            : '실질 식비가 예산 범위입니다.';
+
+        sendJson(res, 200, {
+          month: scope.month || 'all',
+          level,
+          ratio,
+          message,
+          monthCount,
+          baseBudgetYen,
+          ...food,
+        });
         return true;
       }
 
