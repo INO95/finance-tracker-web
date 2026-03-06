@@ -1,13 +1,13 @@
 (function initApi(global) {
   const App = global.FinanceApp = global.FinanceApp || {};
 
-  const state = App.state;
-  const constants = App.constants;
-  const store = App.store;
+  const state = App.state || {};
+  const constants = App.constants || {};
+  const store = App.store || {};
 
   function authHeaders(base = {}) {
     const headers = new Headers(base);
-    const token = store.getApiToken();
+    const token = typeof store.getApiToken === 'function' ? store.getApiToken() : '';
     if (token) headers.set('x-api-token', token);
     return headers;
   }
@@ -22,7 +22,7 @@
         const payload = await res.json();
         message = payload.error || payload.message || message;
       } catch {
-        // ignore json parse error
+        // ignore parse error
       }
       throw new Error(message);
     }
@@ -43,8 +43,8 @@
   }
 
   async function loadMeta() {
-    let categories = store.defaultCategoryList();
-    let methods = store.defaultMethodList();
+    let categories = typeof store.defaultCategoryList === 'function' ? store.defaultCategoryList() : [];
+    let methods = typeof store.defaultMethodList === 'function' ? store.defaultMethodList() : [];
 
     try {
       const res = await apiFetch(`${constants.API_BASE}/meta`);
@@ -54,21 +54,25 @@
       categories = [...new Set([...categories, ...state.baseCategories])];
       methods = [...new Set([...methods, ...state.baseMethods])];
       state.foodBudgetYen = Number(meta.foodBudgetYen || state.foodBudgetYen || 60000);
+      state.categoryBudgets = meta.categoryBudgets && typeof meta.categoryBudgets === 'object'
+        ? meta.categoryBudgets
+        : (state.categoryBudgets || {});
     } catch {
       state.baseCategories = categories;
       state.baseMethods = methods;
     }
 
-    categories = [...new Set([...categories, ...store.loadJson(constants.CATEGORIES_KEY, [])])];
-    methods = [...new Set([...methods, ...store.loadJson(constants.METHODS_KEY, [])])];
+    categories = [...new Set([...categories, ...(store.loadJson ? store.loadJson(constants.CATEGORIES_KEY, []) : [])])];
+    methods = [...new Set([...methods, ...(store.loadJson ? store.loadJson(constants.METHODS_KEY, []) : [])])];
 
     return {
       categories,
       methods,
-      defaults: store.loadJson(constants.DEFAULTS_KEY, {}),
+      defaults: store.loadJson ? store.loadJson(constants.DEFAULTS_KEY, {}) : {},
       foodBudgetYen: state.foodBudgetYen,
-      baseCategories: [...state.baseCategories],
-      baseMethods: [...state.baseMethods],
+      categoryBudgets: state.categoryBudgets || {},
+      baseCategories: [...(state.baseCategories || [])],
+      baseMethods: [...(state.baseMethods || [])],
     };
   }
 
@@ -87,32 +91,49 @@
       const res = await apiFetch(`${constants.API_BASE}/settings`);
       const data = await res.json();
       state.foodBudgetYen = Number(data.foodBudgetYen || state.foodBudgetYen || 60000);
+      state.categoryBudgets = data.categoryBudgets && typeof data.categoryBudgets === 'object'
+        ? data.categoryBudgets
+        : (state.categoryBudgets || {});
+      return data;
     } catch {
-      // keep current value
+      return {
+        foodBudgetYen: state.foodBudgetYen,
+        categoryBudgets: state.categoryBudgets || {},
+      };
     }
-    return state.foodBudgetYen;
   }
 
-  async function loadSummary(scope) {
+  async function loadSummary(scope, { preserveState = true } = {}) {
     const params = scopeToSearchParams(scope);
     const res = await apiFetch(`${constants.API_BASE}/summary?${params.toString()}`);
     const data = await res.json();
-    state.monthly = data.monthly || [];
-    state.latestMonth = data.latestMonth || null;
+    if (preserveState) {
+      state.monthly = data.monthly || [];
+      state.latestMonth = data.latestMonth || null;
+    }
     return data;
   }
 
-  async function loadTransactions(scope) {
+  async function loadTransactions(scope, options = {}) {
+    const paginate = options.paginate !== false;
     const params = new URLSearchParams({
-      limit: String(state.txLimit),
-      page: String(state.txPage),
-      sort: state.txSort,
+      sort: String(options.sort || state.txSort || 'date_desc'),
     });
 
-    const scopeParams = scopeToSearchParams(scope);
-    for (const [k, v] of scopeParams.entries()) params.set(k, v);
+    if (paginate) {
+      params.set('limit', String(options.limit || state.txLimit || 100));
+      params.set('page', String(options.page || state.txPage || 1));
+    } else {
+      params.set('paginate', 'false');
+      params.set('limit', String(options.limit || state.txLimit || 100));
+      params.set('page', '1');
+    }
 
+    const scopeParams = scopeToSearchParams(scope);
+    for (const [key, value] of scopeParams.entries()) params.set(key, value);
     if (scope && scope.category) params.set('category', scope.category);
+    if (scope && scope.q) params.set('q', scope.q);
+    if (scope && scope.memo) params.set('memo', scope.memo);
 
     const res = await apiFetch(`${constants.API_BASE}/transactions?${params.toString()}`);
     return res.json();
@@ -124,18 +145,51 @@
     return res.json();
   }
 
-  async function saveFoodBudget(foodBudgetYen) {
-    await apiFetch(`${constants.API_BASE}/settings`, {
+  async function saveSettings(payload) {
+    const res = await apiFetch(`${constants.API_BASE}/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ foodBudgetYen: Math.trunc(foodBudgetYen) }),
+      body: JSON.stringify(payload || {}),
     });
-    state.foodBudgetYen = Math.trunc(foodBudgetYen);
-    return state.foodBudgetYen;
+    const data = await res.json();
+    state.foodBudgetYen = Number(data.foodBudgetYen || state.foodBudgetYen || 60000);
+    state.categoryBudgets = data.categoryBudgets && typeof data.categoryBudgets === 'object'
+      ? data.categoryBudgets
+      : (state.categoryBudgets || {});
+    return data;
+  }
+
+  async function saveFoodBudget(foodBudgetYen) {
+    return saveSettings({ foodBudgetYen: Math.trunc(foodBudgetYen) });
   }
 
   async function createTransaction(payload) {
     const res = await apiFetch(`${constants.API_BASE}/transactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  }
+
+  async function updateTransaction(id, payload) {
+    const res = await apiFetch(`${constants.API_BASE}/transactions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  }
+
+  async function deleteTransaction(id) {
+    const res = await apiFetch(`${constants.API_BASE}/transactions/${id}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  }
+
+  async function restoreTransaction(payload) {
+    const res = await apiFetch(`${constants.API_BASE}/transactions/restore`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -153,8 +207,12 @@
     loadSummary,
     loadTransactions,
     loadAlert,
+    saveSettings,
     saveFoodBudget,
     createTransaction,
+    updateTransaction,
+    deleteTransaction,
+    restoreTransaction,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

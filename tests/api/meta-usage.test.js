@@ -11,6 +11,7 @@ test('GET /api/finance/meta returns categories, methods, currencies, and budget'
         assert.ok(Array.isArray(res.json.categories));
         assert.ok(Array.isArray(res.json.paymentMethods));
         assert.equal(typeof res.json.foodBudgetYen, 'number');
+        assert.equal(typeof res.json.categoryBudgets, 'object');
         assert.ok(res.json.currencies.includes('JPY'));
     } finally {
         await ctx.cleanup();

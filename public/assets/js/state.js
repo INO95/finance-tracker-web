@@ -6,6 +6,8 @@
   const METHODS_KEY = 'financePaymentMethods';
   const DEFAULTS_KEY = 'financeFormDefaults';
   const BALANCE_ACCOUNTS_KEY = 'financeBalanceAccounts';
+  const RECURRING_TEMPLATES_KEY = 'financeRecurringTemplates';
+  const BALANCE_SNAPSHOTS_KEY = 'financeBalanceSnapshots';
   const API_BASE = './api/finance';
 
   const state = {
@@ -13,14 +15,21 @@
     txTotal: 0,
     txLimit: 100,
     txSort: 'date_desc',
+    txRows: [],
     scopeMode: 'all',
     foodBudgetYen: 60000,
+    categoryBudgets: {},
     baseCategories: [],
     baseMethods: [],
     monthly: [],
+    monthlyAll: [],
     latestMonth: null,
     usage: { categoryUsage: {}, paymentMethodUsage: {} },
     refreshRequestId: 0,
+    editingTransactionId: null,
+    lastDeletedTransaction: null,
+    allScopedTransactions: [],
+    importPreview: null,
   };
 
   function loadJson(key, fallback) {
@@ -70,18 +79,38 @@
   }
 
   function setBalanceAccounts(list) {
-    saveJson(BALANCE_ACCOUNTS_KEY, list);
+    saveJson(BALANCE_ACCOUNTS_KEY, Array.isArray(list) ? list : []);
+  }
+
+  function getBalanceSnapshots() {
+    const snapshots = loadJson(BALANCE_SNAPSHOTS_KEY, {});
+    return snapshots && typeof snapshots === 'object' && !Array.isArray(snapshots) ? snapshots : {};
+  }
+
+  function setBalanceSnapshots(value) {
+    saveJson(BALANCE_SNAPSHOTS_KEY, value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+  }
+
+  function getRecurringTemplates() {
+    const list = loadJson(RECURRING_TEMPLATES_KEY, []);
+    return Array.isArray(list) ? list : [];
+  }
+
+  function setRecurringTemplates(list) {
+    saveJson(RECURRING_TEMPLATES_KEY, Array.isArray(list) ? list : []);
   }
 
   function getSelectValues(selectId) {
-    return [...global.document.getElementById(selectId).options]
-      .map(o => o.value)
-      .filter(Boolean);
+    const el = global.document.getElementById(selectId);
+    return el
+      ? [...el.options].map(opt => opt.value).filter(Boolean)
+      : [];
   }
 
   function setIfExists(selectId, value) {
     const el = global.document.getElementById(selectId);
-    if ([...el.options].some(o => o.value === value)) {
+    if (!el) return false;
+    if ([...el.options].some(opt => opt.value === value)) {
       el.value = value;
       return true;
     }
@@ -95,6 +124,8 @@
     METHODS_KEY,
     DEFAULTS_KEY,
     BALANCE_ACCOUNTS_KEY,
+    RECURRING_TEMPLATES_KEY,
+    BALANCE_SNAPSHOTS_KEY,
     API_BASE,
   };
   App.store = {
@@ -107,6 +138,10 @@
     defaultBalanceAccounts,
     getBalanceAccounts,
     setBalanceAccounts,
+    getBalanceSnapshots,
+    setBalanceSnapshots,
+    getRecurringTemplates,
+    setRecurringTemplates,
     getSelectValues,
     setIfExists,
   };

@@ -155,7 +155,7 @@ class JsonRepository {
     async createTransaction(input) {
         return this.enqueueMutation(async db => {
             const tx = {
-                id: this.nextId(),
+                id: Number.isFinite(Number(input.id)) ? Math.trunc(Number(input.id)) : this.nextId(),
                 date: input.date,
                 item: input.item,
                 amount: input.amount,
@@ -164,9 +164,11 @@ class JsonRepository {
                 memo: input.memo,
                 currency: input.currency,
                 tags: Array.isArray(input.tags) ? input.tags : [],
-                created_at: new Date().toISOString(),
+                created_at: input.created_at ? String(input.created_at) : new Date().toISOString(),
+                updated_at: Object.prototype.hasOwnProperty.call(input, 'updated_at') ? input.updated_at : null,
             };
 
+            db.transactions = db.transactions.filter(existing => Number(existing.id) !== Number(tx.id));
             db.transactions.push(tx);
             db.config = db.config || {};
             db.config.last_updated = tx.date;
@@ -204,6 +206,19 @@ class JsonRepository {
             db.transactions[idx].updated_at = new Date().toISOString();
             return db.transactions[idx];
         });
+    }
+
+    async deleteTransaction(id) {
+        return this.enqueueMutation(async db => {
+            const idx = db.transactions.findIndex(t => Number(t.id) === Number(id));
+            if (idx < 0) return null;
+            const [removed] = db.transactions.splice(idx, 1);
+            return removed || null;
+        });
+    }
+
+    async restoreTransaction(input) {
+        return this.createTransaction(input);
     }
 
     async close() {

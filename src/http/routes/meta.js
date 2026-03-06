@@ -20,6 +20,7 @@ function createMetaRoutes({ sendJson, sendMethodNotAllowed, loadConfigSafe, getF
       categories: [...categories],
       paymentMethods: [...paymentMethods],
       foodBudgetYen: await getFoodBudgetYen(),
+      categoryBudgets: cfg?.financePolicy?.categoryBudgets || {},
     });
     return true;
   };

@@ -123,6 +123,17 @@ function sanitizeTransactionPatch(body) {
   return patch;
 }
 
+function sanitizeTransactionRecord(body) {
+  const record = sanitizeTransactionBody(body);
+  const id = Number(body && body.id);
+  if (Number.isFinite(id) && id > 0) record.id = Math.trunc(id);
+  if (body && body.created_at) record.created_at = String(body.created_at);
+  if (body && Object.prototype.hasOwnProperty.call(body, 'updated_at')) {
+    record.updated_at = body.updated_at ? String(body.updated_at) : null;
+  }
+  return record;
+}
+
 module.exports = {
   cleanText,
   validateTransactionInput,
@@ -131,4 +142,5 @@ module.exports = {
   parseJsonBody,
   sanitizeTransactionBody,
   sanitizeTransactionPatch,
+  sanitizeTransactionRecord,
 };

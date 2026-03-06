@@ -71,14 +71,19 @@ test('summary/alerts/settings/health smoke flow', async () => {
         const updateSettingsRes = await ctx.request({
             method: 'POST',
             pathname: '/api/finance/settings',
-            body: { foodBudgetYen: 70000 },
+            body: {
+                foodBudgetYen: 70000,
+                categoryBudgets: { 식비: 20000, 교통비: 10000 },
+            },
         });
         assert.equal(updateSettingsRes.status, 200);
         assert.equal(updateSettingsRes.json.ok, true);
+        assert.equal(updateSettingsRes.json.categoryBudgets['식비'], 20000);
 
         const settingsRes = await ctx.request({ method: 'GET', pathname: '/api/finance/settings' });
         assert.equal(settingsRes.status, 200);
         assert.equal(settingsRes.json.foodBudgetYen, 70000);
+        assert.equal(settingsRes.json.categoryBudgets['교통비'], 10000);
 
         const healthRes = await ctx.request({ method: 'GET', pathname: '/api/health' });
         assert.equal(healthRes.status, 200);

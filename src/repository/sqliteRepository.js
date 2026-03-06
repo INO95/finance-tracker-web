@@ -272,7 +272,7 @@ class SqliteRepository {
     async createTransaction(input) {
         await this.ready;
         const tx = {
-            id: this.nextId(),
+            id: Number.isFinite(Number(input.id)) ? Math.trunc(Number(input.id)) : this.nextId(),
             date: input.date,
             item: input.item,
             amount: Number(input.amount),
@@ -281,13 +281,13 @@ class SqliteRepository {
             memo: input.memo,
             currency: input.currency,
             tags: Array.isArray(input.tags) ? input.tags : [],
-            created_at: new Date().toISOString(),
-            updated_at: null,
+            created_at: input.created_at ? String(input.created_at) : new Date().toISOString(),
+            updated_at: Object.prototype.hasOwnProperty.call(input, 'updated_at') ? input.updated_at : null,
         };
 
         await this.run(
             `INSERT INTO transactions (id, date, item, amount, category, payment_method, memo, currency, tags_json, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 tx.id,
                 tx.date,
@@ -299,6 +299,7 @@ class SqliteRepository {
                 tx.currency,
                 JSON.stringify(tx.tags),
                 tx.created_at,
+                tx.updated_at,
             ],
         );
 
@@ -501,6 +502,54 @@ class SqliteRepository {
             scope.params,
         );
         return Math.max(1, Number(row && row.monthCount ? row.monthCount : 0));
+    }
+
+    async deleteTransaction(id) {
+        await this.ready;
+
+        return this.withTransaction(async () => {
+            const current = await this.getTransactionById(id);
+            if (!current) return null;
+            await this.run('DELETE FROM transactions WHERE id = ?', [Number(id)]);
+            return current;
+        });
+    }
+
+    async restoreTransaction(input) {
+        await this.ready;
+        const tx = {
+            id: Number.isFinite(Number(input.id)) ? Math.trunc(Number(input.id)) : this.nextId(),
+            date: input.date,
+            item: input.item,
+            amount: Number(input.amount),
+            category: input.category,
+            paymentMethod: input.paymentMethod,
+            memo: input.memo,
+            currency: input.currency,
+            tags: Array.isArray(input.tags) ? input.tags : [],
+            created_at: input.created_at ? String(input.created_at) : new Date().toISOString(),
+            updated_at: Object.prototype.hasOwnProperty.call(input, 'updated_at') ? input.updated_at : null,
+        };
+
+        await this.run(
+            `INSERT OR REPLACE INTO transactions (id, date, item, amount, category, payment_method, memo, currency, tags_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                tx.id,
+                tx.date,
+                tx.item,
+                tx.amount,
+                tx.category,
+                tx.paymentMethod,
+                tx.memo,
+                tx.currency,
+                JSON.stringify(tx.tags),
+                tx.created_at,
+                tx.updated_at,
+            ],
+        );
+
+        return this.getTransactionById(tx.id);
     }
 
     async updateTransaction(id, patch) {

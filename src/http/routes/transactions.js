@@ -11,6 +11,7 @@ const {
   parseJsonBody,
   sanitizeTransactionBody,
   sanitizeTransactionPatch,
+  sanitizeTransactionRecord,
 } = require('../../domain/validation/transaction');
 
 function routeParams(url) {
@@ -50,6 +51,9 @@ function applyInMemoryQuery(rows, query) {
   sortRowsInMemory(out, query.sort);
 
   const total = out.length;
+  if (query.paginate === false) {
+    return { total, rows: out };
+  }
   const start = (query.page - 1) * query.limit;
   const paged = out.slice(start, start + query.limit);
   return { total, rows: paged };
@@ -110,6 +114,7 @@ function createTransactionsRoutes({
           category: url.searchParams.get('category') || '',
           q: url.searchParams.get('q') || '',
           memo: url.searchParams.get('memo') || '',
+          paginate: url.searchParams.get('paginate') || 'true',
           limit: coercePositiveInt(url.searchParams.get('limit') || 100, 100, { min: 1, max: 100 }),
           page: coercePositiveInt(url.searchParams.get('page') || 1, 1, { min: 1, max: 1000000 }),
           sort: String(url.searchParams.get('sort') || 'date_desc'),
@@ -143,9 +148,34 @@ function createTransactionsRoutes({
       return true;
     }
 
+    if (url.pathname === '/api/finance/transactions/restore') {
+      if (req.method !== 'POST') {
+        sendMethodNotAllowed(res, ['POST']);
+        return true;
+      }
+
+      if (!requireApiAuth(req, res)) return true;
+
+      try {
+        const body = await parseJsonBody(req);
+        const errors = validateTransactionInput(body, { partial: false });
+        if (errors.length) {
+          sendValidationFailed(res, errors);
+          return true;
+        }
+
+        const tx = await storage.restoreTransaction(sanitizeTransactionRecord(body));
+        sendJson(res, 200, { ok: true, transaction: tx });
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error.message });
+      }
+
+      return true;
+    }
+
     if (transactionPathMatch) {
-      if (req.method !== 'PATCH') {
-        sendMethodNotAllowed(res, ['PATCH']);
+      if (req.method !== 'PATCH' && req.method !== 'DELETE') {
+        sendMethodNotAllowed(res, ['PATCH', 'DELETE']);
         return true;
       }
 
@@ -153,6 +183,17 @@ function createTransactionsRoutes({
       const id = Number(transactionPathMatch[1]);
       if (!Number.isFinite(id)) {
         sendJson(res, 400, { ok: false, error: 'invalid id' });
+        return true;
+      }
+
+      if (req.method === 'DELETE') {
+        const tx = await storage.deleteTransaction(id);
+        if (!tx) {
+          sendJson(res, 404, { ok: false, error: 'transaction not found' });
+          return true;
+        }
+
+        sendJson(res, 200, { ok: true, transaction: tx });
         return true;
       }
 

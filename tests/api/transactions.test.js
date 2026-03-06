@@ -15,6 +15,59 @@ test('DELETE /api/finance/transactions returns 405', async () => {
     }
 });
 
+test('transaction delete, restore, and paginate=false flow works', async () => {
+    const ctx = await createTestApp({ storageDriver: 'sqlite' });
+    try {
+        const createRes = await ctx.request({
+            method: 'POST',
+            pathname: '/api/finance/transactions',
+            body: {
+                date: '2026-02-13',
+                item: '복구테스트',
+                amount: -1200,
+                category: '식비',
+                paymentMethod: '현금',
+                currency: 'JPY',
+                memo: 'undo',
+            },
+        });
+
+        const created = createRes.json.transaction;
+        const deleteRes = await ctx.request({
+            method: 'DELETE',
+            pathname: `/api/finance/transactions/${created.id}`,
+        });
+        assert.equal(deleteRes.status, 200);
+        assert.equal(deleteRes.json.transaction.id, created.id);
+
+        const emptyListRes = await ctx.request({
+            method: 'GET',
+            pathname: '/api/finance/transactions?paginate=false&month=2026-02',
+        });
+        assert.equal(emptyListRes.status, 200);
+        assert.equal(emptyListRes.json.total, 0);
+        assert.equal(emptyListRes.json.rows.length, 0);
+
+        const restoreRes = await ctx.request({
+            method: 'POST',
+            pathname: '/api/finance/transactions/restore',
+            body: deleteRes.json.transaction,
+        });
+        assert.equal(restoreRes.status, 200);
+        assert.equal(restoreRes.json.transaction.id, created.id);
+
+        const restoredListRes = await ctx.request({
+            method: 'GET',
+            pathname: '/api/finance/transactions?paginate=false&month=2026-02',
+        });
+        assert.equal(restoredListRes.status, 200);
+        assert.equal(restoredListRes.json.total, 1);
+        assert.equal(restoredListRes.json.rows[0].item, '복구테스트');
+    } finally {
+        await ctx.cleanup();
+    }
+});
+
 test('custom paymentMethod is accepted on POST /transactions', async () => {
     const ctx = await createTestApp({ storageDriver: 'sqlite' });
     try {
