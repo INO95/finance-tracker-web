@@ -68,7 +68,9 @@ function normalizePaginateFlag(value, fallback = true) {
 function monthToNumber(monthText) {
     const m = String(monthText || '').match(/^(\d{4})-(\d{2})$/);
     if (!m) return null;
-    return Number(m[1]) * 100 + Number(m[2]);
+    const month = Number(m[2]);
+    if (month < 1 || month > 12) return null;
+    return Number(m[1]) * 100 + month;
 }
 
 function applyListQuery(transactions, query) {

@@ -220,6 +220,11 @@ function createTransactionsRoutes({
         return true;
       }
 
+      if (typeof storage.getUsageStats === 'function') {
+        sendJson(res, 200, await storage.getUsageStats());
+        return true;
+      }
+
       const listResult = await storage.listTransactions();
       const usage = computeUsageStats(toNormalizedRows(listResult));
       sendJson(res, 200, usage);

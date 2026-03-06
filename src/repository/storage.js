@@ -1,6 +1,5 @@
 const path = require('path');
 const { JsonRepository } = require('./jsonRepository');
-const { SqliteRepository } = require('./sqliteRepository');
 
 function createStorage({
     financeDbPath,
@@ -20,7 +19,20 @@ function createStorage({
     }
 
     if (selectedDriver === 'sqlite') {
-        return new SqliteRepository({ sqlitePath: dbPath, schemaPath: sqlSchemaPath });
+        try {
+            const { SqliteRepository } = require('./sqliteRepository');
+            return new SqliteRepository({ sqlitePath: dbPath, schemaPath: sqlSchemaPath });
+        } catch (error) {
+            const missingSqliteDependency = error
+                && error.code === 'MODULE_NOT_FOUND'
+                && String(error.message || '').includes("'better-sqlite3'");
+            if (missingSqliteDependency) {
+                const wrapped = new Error('sqlite storage requires installed better-sqlite3 dependency. Run `npm ci` first.');
+                wrapped.cause = error;
+                throw wrapped;
+            }
+            throw error;
+        }
     }
 
     throw new Error(`Unsupported storage driver: ${selectedDriver}`);

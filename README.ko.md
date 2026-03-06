@@ -6,7 +6,7 @@
 
 일일 입출금 기록과 월별 식비 예산 추적을 위한 경량 셀프호스팅 앱.
 
-**기술 스택:** 순수 Node.js (외부 의존성 없음), 바닐라 HTML/CSS/JS
+**기술 스택:** 최소 의존성 Node.js 백엔드 + 바닐라 HTML/CSS/JS 프런트엔드, 저장소는 `better-sqlite3` 기반 SQLite
 
 ## 주요 기능
 
@@ -22,6 +22,7 @@
 ```bash
 git clone https://github.com/YOUR_USERNAME/finance-tracker-web.git
 cd finance-tracker-web
+npm ci
 cp .env.example .env
 cp data/example.json data/finance_db.json
 npm run migrate:sqlite
@@ -40,6 +41,8 @@ curl http://127.0.0.1:4380/api/health
 npm test
 ```
 
+로컬에서 `better-sqlite3` 모듈이 없다고 나오면 먼저 `npm ci`를 실행하면 됩니다.
+
 포함된 핵심 검증:
 - API 인증/검증 회귀 테스트
 - `sqlite`/`json` 조회 결과 일치 테스트 (`month/fromMonth/toMonth`, `sort`, `page`, `limit`)
@@ -52,6 +55,8 @@ docker compose up -d
 curl http://127.0.0.1:4380/api/health
 docker compose down
 ```
+
+이미지 빌드 시 프로덕션 의존성과 네이티브 `better-sqlite3` 모듈까지 함께 설치됩니다.
 
 ## 환경 변수
 

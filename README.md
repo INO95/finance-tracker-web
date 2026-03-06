@@ -13,7 +13,7 @@ A lightweight, self-hosted personal finance tracker designed for:
 - Multi-currency support (JPY, KRW, USD)
 - Customizable categories and payment methods
 
-**Tech Stack:** Pure Node.js (no external dependencies), vanilla HTML/CSS/JS
+**Tech Stack:** Minimal Node.js backend with vanilla HTML/CSS/JS frontend, SQLite storage via `better-sqlite3`
 
 ## Features
 
@@ -35,6 +35,7 @@ A lightweight, self-hosted personal finance tracker designed for:
 ```bash
 git clone https://github.com/YOUR_USERNAME/finance-tracker-web.git
 cd finance-tracker-web
+npm ci
 cp .env.example .env
 cp data/example.json data/finance_db.json
 npm run migrate:sqlite
@@ -62,6 +63,8 @@ curl http://127.0.0.1:4380/api/health
 npm test
 ```
 
+If `better-sqlite3` is missing locally, run `npm ci` first.
+
 Coverage includes:
 - API auth/validation regression checks
 - `sqlite` vs `json` query compatibility checks (`month/fromMonth/toMonth`, `sort`, `page`, `limit`)
@@ -73,6 +76,8 @@ Coverage includes:
 docker build -t finance-tracker-web .
 docker run -p 4380:4380 -v $(pwd)/data:/app/data finance-tracker-web
 ```
+
+The image installs production dependencies during build, including the native `better-sqlite3` module.
 
 Or with docker compose:
 

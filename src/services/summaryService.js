@@ -7,7 +7,9 @@ function monthOf(dateText) {
 function monthToNumber(monthText) {
     const m = String(monthText || '').match(/^(\d{4})-(\d{2})$/);
     if (!m) return null;
-    return Number(m[1]) * 100 + Number(m[2]);
+    const month = Number(m[2]);
+    if (month < 1 || month > 12) return null;
+    return Number(m[1]) * 100 + month;
 }
 
 function inMonthRange(monthText, fromMonth, toMonth) {
@@ -70,9 +72,12 @@ function computeEffectiveFood(rows, budgetYen) {
 }
 
 function monthParts(monthText) {
-    const m = String(monthText || '').match(/^(\d{4})-(\d{2})$/);
-    if (!m) return null;
-    return { year: Number(m[1]), month: Number(m[2]) };
+    const normalized = monthToNumber(monthText);
+    if (normalized == null) return null;
+    return {
+        year: Math.trunc(normalized / 100),
+        month: normalized % 100,
+    };
 }
 
 function countMonthsFromRange({ month = '', fromMonth = '', toMonth = '' } = {}, rows = []) {
@@ -139,9 +144,9 @@ function validateMonthScope({ month = '', fromMonth = '', toMonth = '' } = {}) {
     const errors = [];
     const hasValidMonthFormat = value => /^\d{4}-\d{2}$/.test(String(value || ''));
 
-    if (month && !hasValidMonthFormat(month)) errors.push('month must be YYYY-MM');
-    if (fromMonth && !hasValidMonthFormat(fromMonth)) errors.push('fromMonth must be YYYY-MM');
-    if (toMonth && !hasValidMonthFormat(toMonth)) errors.push('toMonth must be YYYY-MM');
+    if (month && (!hasValidMonthFormat(month) || monthToNumber(month) == null)) errors.push('month must be YYYY-MM');
+    if (fromMonth && (!hasValidMonthFormat(fromMonth) || monthToNumber(fromMonth) == null)) errors.push('fromMonth must be YYYY-MM');
+    if (toMonth && (!hasValidMonthFormat(toMonth) || monthToNumber(toMonth) == null)) errors.push('toMonth must be YYYY-MM');
 
     const fromN = monthToNumber(fromMonth);
     const toN = monthToNumber(toMonth);

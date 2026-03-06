@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const sqlite3 = require('sqlite3');
+const Database = require('better-sqlite3');
 const { createApp } = require('../src/app');
 
 const DEFAULT_ROWS = 10000;
@@ -36,51 +36,23 @@ function toInt(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {})
 }
 
 function openDb(filePath) {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(filePath, err => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(db);
-    });
-  });
+  return new Database(filePath);
 }
 
 function run(db, sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function onRun(err) {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve({ lastID: this.lastID, changes: this.changes });
-    });
-  });
+  const result = db.prepare(sql).run(...params);
+  return {
+    lastID: Number(result.lastInsertRowid || 0),
+    changes: Number(result.changes || 0),
+  };
 }
 
 function exec(db, sql) {
-  return new Promise((resolve, reject) => {
-    db.exec(sql, err => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve();
-    });
-  });
+  db.exec(sql);
 }
 
 function closeDb(db) {
-  return new Promise((resolve, reject) => {
-    db.close(err => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve();
-    });
-  });
+  db.close();
 }
 
 function isoDateFor(offset) {
@@ -96,17 +68,17 @@ function nowIsoWithOffset(offsetMs) {
 async function seedSqlite({ sqlitePath, schemaPath, rows }) {
   await fs.promises.mkdir(path.dirname(sqlitePath), { recursive: true });
   const schemaSql = await fs.promises.readFile(schemaPath, 'utf8');
-  const db = await openDb(sqlitePath);
+  const db = openDb(sqlitePath);
 
   const categories = ['식비', '교통비', '월세', '통신비', '생활', '기타'];
   const methods = ['현금', '스미토모', '라쿠텐', '올리브 카드 (데빗)'];
   const currencies = ['JPY', 'JPY', 'JPY', 'KRW', 'USD'];
 
   try {
-    await exec(db, 'PRAGMA journal_mode=WAL;');
-    await exec(db, 'PRAGMA synchronous=NORMAL;');
-    await exec(db, schemaSql);
-    await run(db, 'BEGIN IMMEDIATE');
+    exec(db, 'PRAGMA journal_mode=WAL;');
+    exec(db, 'PRAGMA synchronous=NORMAL;');
+    exec(db, schemaSql);
+    exec(db, 'BEGIN IMMEDIATE');
 
     const baseId = Date.now() * 1000;
     for (let i = 0; i < rows; i += 1) {
@@ -122,7 +94,7 @@ async function seedSqlite({ sqlitePath, schemaPath, rows }) {
       const tags = i % 7 === 0 ? ['bench'] : [];
       const createdAt = nowIsoWithOffset(i);
 
-      await run(
+      run(
         db,
         `INSERT OR REPLACE INTO transactions
           (id, date, item, amount, category, payment_method, memo, currency, tags_json, created_at, updated_at)
@@ -131,16 +103,16 @@ async function seedSqlite({ sqlitePath, schemaPath, rows }) {
       );
     }
 
-    await run(db, 'COMMIT');
+    exec(db, 'COMMIT');
   } catch (error) {
     try {
-      await run(db, 'ROLLBACK');
+      exec(db, 'ROLLBACK');
     } catch {
       // ignore rollback failure
     }
     throw error;
   } finally {
-    await closeDb(db);
+    closeDb(db);
   }
 }
 
